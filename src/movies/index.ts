@@ -1,34 +1,29 @@
 'use server'
 import { getPayloadHMR } from '@payloadcms/next/utilities'
 import configPromise from '@payload-config'
-
-import { posterURL } from './utils'
 import { revalidatePath } from 'next/cache'
 
-const payload = await getPayloadHMR({ config: configPromise })
+import { posterURL } from './utils'
 
-export async function addVote(movieId: number) {
-  const movie = await payload.findByID({
-    collection: 'movies',
-    id: movieId,
-  })
-
-  await payload.update({
-    collection: 'movies',
-    id: movieId,
-    data: {
-      votes: movie.votes + 1,
-    },
-  })
-
-  const movies = await payload.find({
-    collection: 'movies',
-    sort: '-votes',
-  })
-  return movies.docs
+export async function searchMovies(query: string) {
+  const response = await fetch(
+    `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(
+      query,
+    )}&include_adult=false&language=en-US&page=1&api_key=${process.env.TMDB_API_KEY}`,
+  )
+  const { results } = await response.json()
+  return results
+    .map(({ id, poster_path, title }: { id: string; poster_path: string; title: string }) => ({
+      id,
+      poster_path,
+      title,
+    }))
+    .filter(({ poster_path }: { poster_path: string }) => !!poster_path)
 }
 
 export async function addMovieAction(movieId: number) {
+  const payload = await getPayloadHMR({ config: configPromise })
+
   const movieDataReq = await fetch(
     `https://api.themoviedb.org/3/movie/${movieId}?language=en-US&api_key=${process.env.TMDB_API_KEY}`,
   )
@@ -44,10 +39,6 @@ export async function addMovieAction(movieId: number) {
     data: {
       text: `${title} Poster`,
     },
-    overrideAccess: true,
-    showHiddenFields: false,
-    disableVerificationEmail: true,
-    // Alternatively you can use a local filepath if you have local media
     file: {
       data: posterBuffer,
       name: `${movieId}.jpg`,
@@ -67,8 +58,6 @@ export async function addMovieAction(movieId: number) {
       tagline,
       genres,
     },
-    overrideAccess: true,
-    showHiddenFields: false,
   })
 
   revalidatePath('/')
@@ -76,18 +65,25 @@ export async function addMovieAction(movieId: number) {
   return movie
 }
 
-export async function searchMovies(query: string) {
-  const response = await fetch(
-    `https://api.themoviedb.org/3/search/movie?query=${encodeURIComponent(
-      query,
-    )}&include_adult=false&language=en-US&page=1&api_key=${process.env.TMDB_API_KEY}`,
-  )
-  const { results } = await response.json()
-  return results
-    .map(({ id, poster_path, title }: { id: string; poster_path: string; title: string }) => ({
-      id,
-      poster_path,
-      title,
-    }))
-    .filter(({ poster_path }: { poster_path: string }) => !!poster_path)
+export async function addVote(movieId: number) {
+  const payload = await getPayloadHMR({ config: configPromise })
+
+  const movie = await payload.findByID({
+    collection: 'movies',
+    id: movieId,
+  })
+
+  await payload.update({
+    collection: 'movies',
+    id: movieId,
+    data: {
+      votes: movie.votes + 1,
+    },
+  })
+
+  const movies = await payload.find({
+    collection: 'movies',
+    sort: '-votes',
+  })
+  return movies.docs
 }
